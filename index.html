@@ -56,13 +56,14 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
+        const { useState, useMemo, useEffect, useRef } = React;
         const icons = window.lucide || window.lucideReact || {};
         const { 
             LayoutDashboard, Users, HardHat, CalendarRange, Search, Bell, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, 
             MoreHorizontal, AlertCircle, CheckCircle2, Briefcase, TrendingUp, Settings, Menu, X, ArrowRight, Download, Trash2, 
             Edit, Save, ClipboardList, MessageSquare, PlusCircle, MinusCircle, Clock, FileText, AlertTriangle, Calendar, 
-            CheckSquare, ListTodo, ExternalLink, User, DollarSign, Zap, Copy, StickyNote, CalendarDays, Archive, RotateCcw
+            CheckSquare, ListTodo, ExternalLink, User, DollarSign, Zap, Copy, StickyNote, CalendarDays, Archive, RotateCcw,
+            Upload, Database
         } = icons;
 
         // --- Constants & Data ---
@@ -560,34 +561,56 @@
             return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60"><div className="bg-white w-full max-w-xl rounded-xl flex flex-col max-h-[80vh]"><div className="p-4 border-b flex justify-between"><h3 className="font-bold">Review: {reviewingStaff.name}</h3><button onClick={onClose} className="flex items-center text-sm text-slate-500"><span className="mr-1">Close</span><Icon icon={X} size={18} /></button></div><div className="flex border-b"><button onClick={()=>setActiveTab('new')} className={`flex-1 p-2 ${activeTab==='new'?'border-b-2 border-blue-500':''}`}>Entry</button><button onClick={()=>setActiveTab('history')} className={`flex-1 p-2 ${activeTab==='history'?'border-b-2 border-blue-500':''}`}>History</button></div><div className="p-4 overflow-y-auto">{activeTab === 'new' ? <form id="revForm" onSubmit={handleSubmit} className="space-y-3"><textarea value={tempWorkload} onChange={e=>setTempWorkload(e.target.value)} placeholder="Workload..." className="w-full border p-2 rounded" rows="3"></textarea><textarea value={tempGoals} onChange={e=>setTempGoals(e.target.value)} placeholder="Goals..." className="w-full border p-2 rounded" rows="3"></textarea><textarea value={tempGeneral} onChange={e=>setTempGeneral(e.target.value)} placeholder="General..." className="w-full border p-2 rounded" rows="3"></textarea><div className="space-y-2"><div className="flex justify-between"><span className="text-xs font-bold">Extra</span><button type="button" onClick={addField} className="text-xs text-blue-600">+ Add Point</button></div>{cFields.map(f=><div key={f.id} className="flex gap-2"><input placeholder="Topic" value={f.label} onChange={e=>updateField(f.id,'label',e.target.value)} className="border p-1 w-1/3 text-xs"/><input placeholder="Notes" value={f.value} onChange={e=>updateField(f.id,'value',e.target.value)} className="border p-1 flex-1 text-xs"/></div>)}</div></form> : <div className="space-y-2">{reviews.filter(r=>r.engId===reviewingStaff.id).map(r=><div key={r.id} className="border p-2 rounded"><div className="font-bold text-xs">{r.date}</div><div className="text-sm">{r.workload}</div></div>)}</div>}</div>{activeTab === 'new' && <div className="p-4 border-t flex justify-end"><button type="submit" form="revForm" className="bg-blue-600 text-white px-4 py-2 rounded">Save</button></div>}</div></div>;
         };
 
+        // --- Settings View ---
+        const SettingsView = ({ engineers, allocations, reviews, tasks, scratchpad, loadData }) => {
+            const handleExport = () => {
+                const data = { engineers, allocations, reviews, tasks, scratchpad };
+                const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `staffing_backup_${new Date().toISOString().split('T')[0]}.json`; a.click();
+            };
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        loadData(data);
+                        alert('Data imported successfully!');
+                    } catch (err) { alert('Invalid file format'); }
+                };
+                reader.readAsText(file);
+            };
+
+            return (
+                <div className="animate-enter space-y-6">
+                    <div className="bg-white p-6 rounded-xl border shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Icon icon={Database} size={20} className="mr-2"/> Data Management</h3>
+                        <p className="text-sm text-slate-500 mb-6">Export your data to move to another device or backup your work. Import a JSON file to restore data.</p>
+                        <div className="flex gap-4">
+                            <button onClick={handleExport} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Icon icon={Download} size={16} className="mr-2"/> Export Data</button>
+                            <label className="flex items-center px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                                <Icon icon={Upload} size={16} className="mr-2"/> Import Data
+                                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Main Component ---
         const StaffingTool = () => {
             const [view, setView] = useState('dashboard');
             
             // Note: Keys reverted to 'bridgeops_' to restore previous user data
             const [engineers, setEngineers] = useState(() => loadState('bridgeops_engineers', INITIAL_ENGINEERS));
-            const [allocations, setAllocations] = useState(() => {
-                // Auto-migrate from old array format to new Date-Keyed format if needed
-                const loaded = loadState('bridgeops_allocations', INITIAL_ALLOCATIONS);
-                if (loaded.length > 0 && Array.isArray(loaded[0].weeks)) {
-                    const today = new Date();
-                    const startMonday = getMonday(today);
-                    return loaded.map(alloc => {
-                        const schedule = {};
-                        alloc.weeks.forEach((val, idx) => {
-                            const d = new Date(startMonday);
-                            d.setDate(d.getDate() + (idx * 7));
-                            schedule[formatDateKey(d)] = val;
-                        });
-                        const { weeks, ...rest } = alloc;
-                        return { ...rest, schedule };
-                    });
-                }
-                return loaded;
-            });
+            const [allocations, setAllocations] = useState(() => loadState('bridgeops_allocations', INITIAL_ALLOCATIONS));
             const [reviews, setReviews] = useState(() => loadState('bridgeops_reviews', INITIAL_REVIEWS));
             const [tasks, setTasks] = useState(() => loadState('bridgeops_tasks', INITIAL_TASKS));
             const [scratchpad, setScratchpad] = useState(() => loadState('bridgeops_scratchpad', ''));
+            
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedEngFilter, setSelectedEngFilter] = useState('ALL');
             const [actionFilter, setActionFilter] = useState('ALL');
@@ -605,6 +628,15 @@
             useEffect(() => { localStorage.setItem('bridgeops_reviews', JSON.stringify(reviews)); }, [reviews]);
             useEffect(() => { localStorage.setItem('bridgeops_tasks', JSON.stringify(tasks)); }, [tasks]);
             useEffect(() => { localStorage.setItem('bridgeops_scratchpad', JSON.stringify(scratchpad)); }, [scratchpad]);
+
+            // Data Loader for Import
+            const loadData = (data) => {
+                if (data.engineers) setEngineers(data.engineers);
+                if (data.allocations) setAllocations(data.allocations);
+                if (data.reviews) setReviews(data.reviews);
+                if (data.tasks) setTasks(data.tasks);
+                if (data.scratchpad) setScratchpad(data.scratchpad);
+            };
 
             // Create Week Keys for UI Rendering
             const { weekLabels, weekKeys } = useMemo(() => {
@@ -683,7 +715,7 @@
                     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full z-30 shadow-2xl">
                         <div className="p-6 flex items-center space-x-3 text-white mb-6"><div className="p-2 bg-blue-600 rounded-lg"><Icon icon={HardHat} size={24} /></div><div><h1 className="font-bold text-lg tracking-tight">Staffing Tool</h1><p className="text-xs text-slate-400 uppercase tracking-widest">Manager</p></div></div>
                         <nav className="flex-1 px-3 space-y-1">
-                            {[{id:'dashboard', icon:LayoutDashboard, label:'Overview'}, {id:'planning', icon:CalendarRange, label:'Resource Plan'}, {id:'staff', icon:Users, label:'Staff Directory'}, {id:'reviews', icon:FileText, label:'Monthly Check-ins'}, {id:'tasks', icon:ListTodo, label:'Action Items'}].map(item => (
+                            {[{id:'dashboard', icon:LayoutDashboard, label:'Overview'}, {id:'planning', icon:CalendarRange, label:'Resource Plan'}, {id:'staff', icon:Users, label:'Staff Directory'}, {id:'reviews', icon:FileText, label:'Monthly Check-ins'}, {id:'tasks', icon:ListTodo, label:'Action Items'}, {id:'settings', icon:Settings, label:'Settings'}].map(item => (
                                 <button key={item.id} onClick={() => setView(item.id)} className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${view === item.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}><Icon icon={item.icon} size={18} /><span>{item.label}</span></button>
                             ))}
                         </nav>
@@ -696,6 +728,7 @@
                             {view === 'staff' && <StaffDirectoryView engineers={engineers} openAddStaff={openAddStaff} openReviewModal={openReviewModal} openEditStaff={openEditStaff} handleDeleteStaff={handleDeleteStaff} />}
                             {view === 'reviews' && <CheckInsCenterView selectedEngFilter={selectedEngFilter} setSelectedEngFilter={setSelectedEngFilter} engineers={engineers} reviews={reviews} openReviewModal={openReviewModal} />}
                             {view === 'tasks' && <ActionItemsView actionFilter={actionFilter} setActionFilter={setActionFilter} tasks={tasks} engineers={engineers} openTaskModal={openTaskModal} handleDeleteTask={handleDeleteTask} handleArchiveTask={handleArchiveTask} handleCompleteTask={handleCompleteTask} handleRestoreTask={handleRestoreTask} />}
+                            {view === 'settings' && <SettingsView engineers={engineers} allocations={allocations} reviews={reviews} tasks={tasks} scratchpad={scratchpad} loadData={loadData} />}
                         </div>
                         <StaffModal isOpen={isStaffModalOpen} onClose={() => setIsStaffModalOpen(false)} editingStaff={editingStaff} handleSave={handleSaveStaff} CERTS={CERTS} />
                         <ReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} reviewingStaff={reviewingStaff} editingReview={editingReview} handleSave={handleSaveReview} reviews={reviews} />
