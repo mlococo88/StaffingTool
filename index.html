@@ -317,7 +317,19 @@
                                                 </div>
                                             </td>
                                             <td className="p-2 text-center border-r border-slate-100"><div className="text-xs font-bold text-emerald-600">${weeklyBurn.toLocaleString()}</div></td>
-                                            {weekKeys.map((dateKey, i) => { const load = getUtil(allocations, eng.id, dateKey); return <td key={i} className="p-2 text-center border-r border-slate-100"><div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full ${load > 5 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{width: `${Math.min(100, (load/5)*100)}%`}}></div></div><span className="text-[10px] text-slate-400 font-bold">{load}d</span></td>; })}
+                                            {weekKeys.map((dateKey, i) => { 
+                                                const load = getUtil(allocations, eng.id, dateKey); 
+                                                const isUnder = load < 5;
+                                                const isOver = load > 5;
+                                                return (
+                                                    <td key={i} className={`p-2 text-center border-r border-slate-100 ${isUnder ? 'bg-orange-50 animate-pulse' : ''}`}>
+                                                        <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden mb-1">
+                                                            <div className={`h-full ${isOver ? 'bg-rose-500' : isUnder ? 'bg-orange-400' : 'bg-emerald-500'}`} style={{width: `${Math.min(100, (load/5)*100)}%`}}></div>
+                                                        </div>
+                                                        <span className={`text-[10px] font-bold ${isUnder ? 'text-orange-600' : 'text-slate-400'}`}>{load}d</span>
+                                                    </td>
+                                                ); 
+                                            })}
                                         </tr>
                                         {engAllocs.map(alloc => (
                                             <tr key={alloc.id} className="bg-slate-50/30">
